@@ -1,6 +1,11 @@
 from IPython.core.magic import (register_line_magic, register_cell_magic, register_line_cell_magic)
 import marshal, os, subprocess, sys, errno, tempfile, IPython
 
+if sys.platform == 'darwin':
+	LD_LIBRARY_PATH='DYLD_LIBRARY_PATH'
+else:
+	LD_LIBRARY_PATH='LD_LIBRARY_PATH'
+
 def update_sys_path(new, old):
 	# update sys.path to reflect the new state of the PYTHONPATH
 	# variable, while retaining
@@ -83,7 +88,7 @@ def inject_linkfarm_library_path(linkfarmPath):
 
 	env = dict(os.environ)
 	env['EUPS_LIB_LINKFARM'] = os.path.realpath(linkfarmPath)
-	env['DYLD_LIBRARY_PATH'] = linkfarmPath + ':' + env.get('DYLD_LIBRARY_PATH', '')
+	env[LD_LIBRARY_PATH] = linkfarmPath + ':' + env.get(LD_LIBRARY_PATH, '')
 
 	# find our true command line
 	pid = os.getpid()
@@ -94,21 +99,20 @@ def inject_linkfarm_library_path(linkfarmPath):
 		argv += [ '--no-banner' ]
 
 	cmd = which(argv[0])
-	##print pid, cmd, argv, " (DYLD_LIBRARY_PATH=%s)." % os.environ['DYLD_LIBRARY_PATH']
 
 	# re-execute ourselves.
 	if is_console:
 		print
-		print "eups-magic: injecting %s onto (DY)LD_LIBRARY_PATH." % linkfarmPath
+		print "eups-magic: injecting %s into %s." % (linkfarmPath, LD_LIBRARY_PATH)
 	os.execve(cmd, argv, env)
 
 is_console = isinstance(IPython.get_ipython(), IPython.terminal.interactiveshell.TerminalInteractiveShell)
 
 if True:
 	_inject = True
-	if 'EUPS_LIB_LINKFARM' in os.environ and 'DYLD_LIBRARY_PATH' in os.environ:
+	if 'EUPS_LIB_LINKFARM' in os.environ and LD_LIBRARY_PATH in os.environ:
 		linkfarm = os.path.realpath(os.environ["EUPS_LIB_LINKFARM"])
-		ldpaths = os.environ['DYLD_LIBRARY_PATH'].split(':')
+		ldpaths = os.environ[LD_LIBRARY_PATH].split(':')
 		if len(ldpaths) and os.path.realpath(ldpaths[0]) == linkfarm:
 			_inject = False
 
@@ -118,8 +122,8 @@ if True:
 
 	_purge_linkfarm(linkfarm)
 	if is_console:
-		print "eups-magic: (DY)LD_LIBRARY_PATH=%s." % os.environ['DYLD_LIBRARY_PATH']
-	build_library_linkfarm(os.environ['DYLD_LIBRARY_PATH'])
+		print "eups-magic: %s=%s" % (LD_LIBRARY_PATH, os.environ[LD_LIBRARY_PATH])
+	build_library_linkfarm(os.environ[LD_LIBRARY_PATH])
 
 #build_library_linkfarm('/Users/mjuric/projects/eups/stack/DarwinX86/oorb/lsst-g650e0a6f6c/lib:/Users/mjuric/projects/eupsforge/ups_db/DarwinX86/node/master-g585d2d3511/ups')
 #exit()
@@ -182,7 +186,7 @@ def eups(line):
 					value = subprocess.check_output('/bin/echo -n %s' % value, shell=True)
 					if var == "PYTHONPATH":
 						update_sys_path(value, os.environ[var])
-					if var == "DYLD_LIBRARY_PATH":
+					if var == LD_LIBRARY_PATH:
 						build_library_linkfarm(value)
 					os.environ[var] = value
 					#print "set: %s=[%s]" % (var, os.environ[var])
