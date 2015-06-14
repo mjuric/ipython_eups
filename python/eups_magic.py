@@ -102,7 +102,6 @@ if 'IPYTHON_EUPS_LIB_LINKFARM' in os.environ and LD_LIBRARY_PATH in os.environ:
 #rebuild_ld_library_path_linkfarm('/Users/mjuric/projects/eups/stack/DarwinX86/oorb/lsst-g650e0a6f6c/lib:/Users/mjuric/projects/eupsforge/ups_db/DarwinX86/node/master-g585d2d3511/ups')
 #exit()
 
-@register_line_magic
 def eups(line):
 	"my line magic"
 
@@ -176,3 +175,12 @@ def eups(line):
 			print ret
 		except subprocess.CalledProcessError as e:
 			error("%s\n%s" % (str(e), e.output))
+
+def load_ipython_extension(ipython):
+	# The `ipython` argument is the currently active `InteractiveShell`
+	# instance, which can be used in any way. This allows you to register
+	# new magics or aliases, for example.
+	ipython.register_magic_function(eups)
+
+#def unload_ipython_extension(ipython):
+#	# If you want your extension to be unloadable, put that logic here.
