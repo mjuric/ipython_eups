@@ -25,7 +25,8 @@ cleanup_temp_linkfarm()
 	LIBDIR="$IPYTHON_EUPS_LIB_LINKFARM/lib"
 	if [[ -L "$LIBDIR" ]]; then
 		find "$LIBDIR/" -type l -delete		# Remove directory contents (expecting only symlinks!)
-		rmdir "$LIBDIR"/;			# Remove the directory itself
+		RESOLVED_DIR=$(cd $LIBDIR/; pwd -P)
+		rmdir "$RESOLVED_DIR"/;			# Remove the directory itself
 		rm -f "$LIBDIR"				# Remove the symlink
 	fi
 	rmdir "$IPYTHON_EUPS_LIB_LINKFARM"		# Remove the linkfarm directory
