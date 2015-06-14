@@ -1,5 +1,5 @@
 from IPython.core.magic import (register_line_magic, register_cell_magic, register_line_cell_magic)
-import marshal, os, subprocess, sys, errno, tempfile, IPython
+import marshal, os, subprocess, sys, errno, tempfile, IPython, thread
 
 if sys.platform == 'darwin':
 	LD_LIBRARY_PATH='DYLD_LIBRARY_PATH'
@@ -22,110 +22,84 @@ for p in sys.path:
 
 	sys.path = pypath
 
-def _purge_linkfarm(dest):
-	# clean the directory
-	for fn in os.listdir(dest):
-		fn = os.path.join(dest, fn)
+def _purge_linkfarm(libdir):
+	# delete the directory
+	for fn in os.listdir(libdir):
+		fn = os.path.join(libdir, fn)
 		if not os.path.islink(fn):
-			raise Exception("linkfarm cleanup: the file %s is not a symbolic link. aborting for safety reasons." % fn )
+			raise Exception("linkfarm cleanup: the file %s is not a symbolic link. aborting out of caution." % fn )
 		os.remove(fn)
+	os.rmdir(libdir)
 
-def build_library_linkfarm(paths):
-	paths = paths.split(':')
+def rebuild_ld_library_path_linkfarm(paths):
+	# Make sure we have a linkfarm to work with
+	try:
+		linkfarm = os.environ['IPYTHON_EUPS_LIB_LINKFARM']
+	except KeyError:
+		from IPython.utils.warn import error
+		error(
+			"The product you're setting up is attempting to modify %s, and\n" +
+			"IPython hasn't been started with ipython_eups support. It's likely that the\n" +
+			"product won't be setup-ed correctly.\n\n" +
+			"Maybe you forget to `setup ipython_eups' before starting ipython?" % LD_LIBRARY_PATH
+		)
+		return
 
-	dest = os.path.realpath(os.environ["EUPS_LIB_LINKFARM"])
-
-	_purge_linkfarm(dest)
+	# create a temporary $linkfarm/lib directory
+	dest = tempfile.mkdtemp(prefix='ipython-eups-linkfarm.%d.' % os.getpid(), dir=linkfarm)
 
 	# link all items in paths into the joint path
-	for path in reversed(paths):
-		path = os.path.realpath(path)
+	for path in paths.split(':'):
+		if not path:
+			continue
 
-		if path == dest:
+		if path.startswith(linkfarm + os.path.sep):
 			continue
 
 		if not os.path.isdir(path):
 			continue
 
+#		print "LINKING: %s" % path
+#		print "     LF: %s" % linkfarm
+
+		path = os.path.realpath(path)
 		for fn in os.listdir(path):
 			src = os.path.join(path, fn)
 			lnk = os.path.join(dest, fn)
 			try:
 				os.symlink(src, lnk)
 			except OSError as e:
+				# Skip over links that already exist. Items from directories 
+				# earlier on the path will shadow those that come later.
 				if e.errno != errno.EEXIST:
 					raise
 
-# inspired by http://stackoverflow.com/a/5227009/897575
-def which(fn):
-	for path in os.environ["PATH"].split(":"):
-		path = os.path.join(path, fn)
-		if os.path.exists(path):
-			return path
-	return None
 
-def inject_linkfarm_library_path(linkfarmPath):
-	"""
-	Inject the link farm path into (DY)LD_LIBRARY_PATH.
-	
-	Dynamic linker reads LD_LIBRARY_PATH only on program execution, and
-	is unaffected by changes to it made at runtime (e.g., with putenv()).
+	libdir = os.path.join(linkfarm, 'lib')
+	oldlibdir = os.path.realpath(libdir) if os.path.exists(libdir) else None
 
-	Therefore, we need to add the link farm path to LD_LIBRARY_PATH as
-	early in the execution as possible, and re-exec ourselves using
-	execve().  Alas, when executing startup scripts, IPython changes the
-	contents of sys.path to make it appear as if the scripts were run
-	from the command line, so we can't use it to figure out what to
-	execv.  We therefore use 'ps -o command -p' to find the original
-	command line that IPython was run with, and execv that.
-	
-	Known issues:
+	# atomic replacement of the old directory
+	tmplink = '%s.%d.%d' % (dest, thread.get_ident(), os.getpid())	# Unique temporary name
+	os.symlink(os.path.basename(dest), tmplink)
+	os.rename(tmplink, libdir)
 
-	  * If the original command line contains whitespaces, this will
-	    fail.
-	
-	"""
+	# delete the old directory; ignore any errors that may be encountered. as
+	# those can come from race conditions if (say) two threads are trying to delete
+	# the same directory (should be _very_ uncommon, though).
+	try:
+		if oldlibdir is not None:
+			_purge_linkfarm(oldlibdir)
+	except Exception as e:
+		from IPython.utils.warn import warn
+		warn(str(e))
 
-	env = dict(os.environ)
-	env['EUPS_LIB_LINKFARM'] = os.path.realpath(linkfarmPath)
-	env[LD_LIBRARY_PATH] = linkfarmPath + ':' + env.get(LD_LIBRARY_PATH, '')
+# Re-initialize the link farm every time IPython is started, so that the environment
+# is properly cleaned of any left-overs from prior runs. E.g., this may happen
+# when IPython notebook kernel is restarted by the user.
+if 'IPYTHON_EUPS_LIB_LINKFARM' in os.environ and LD_LIBRARY_PATH in os.environ:
+	rebuild_ld_library_path_linkfarm(os.environ['LD_LIBRARY_PATH'])
 
-	# find our true command line
-	pid = os.getpid()
-	argv = subprocess.check_output('ps -o command= -p %d' % pid, shell=True).split()
-
-	# Avoid having IPython write out the banner once it's restarted
-	if is_console:
-		argv += [ '--no-banner' ]
-
-	cmd = which(argv[0])
-
-	# re-execute ourselves.
-	if is_console:
-		print
-		print "eups-magic: injecting %s into %s." % (linkfarmPath, LD_LIBRARY_PATH)
-	os.execve(cmd, argv, env)
-
-is_console = isinstance(IPython.get_ipython(), IPython.terminal.interactiveshell.TerminalInteractiveShell)
-
-if True:
-	_inject = True
-	if 'EUPS_LIB_LINKFARM' in os.environ and LD_LIBRARY_PATH in os.environ:
-		linkfarm = os.path.realpath(os.environ["EUPS_LIB_LINKFARM"])
-		ldpaths = os.environ[LD_LIBRARY_PATH].split(':')
-		if len(ldpaths) and os.path.realpath(ldpaths[0]) == linkfarm:
-			_inject = False
-
-	if _inject:
-		linkfarmPath = tempfile.mkdtemp(prefix='eups-linkfarm')
-		inject_linkfarm_library_path(linkfarmPath)
-
-	_purge_linkfarm(linkfarm)
-	if is_console:
-		print "eups-magic: %s=%s" % (LD_LIBRARY_PATH, os.environ[LD_LIBRARY_PATH])
-	build_library_linkfarm(os.environ[LD_LIBRARY_PATH])
-
-#build_library_linkfarm('/Users/mjuric/projects/eups/stack/DarwinX86/oorb/lsst-g650e0a6f6c/lib:/Users/mjuric/projects/eupsforge/ups_db/DarwinX86/node/master-g585d2d3511/ups')
+#rebuild_ld_library_path_linkfarm('/Users/mjuric/projects/eups/stack/DarwinX86/oorb/lsst-g650e0a6f6c/lib:/Users/mjuric/projects/eupsforge/ups_db/DarwinX86/node/master-g585d2d3511/ups')
 #exit()
 
 @register_line_magic
@@ -187,7 +161,7 @@ def eups(line):
 					if var == "PYTHONPATH":
 						update_sys_path(value, os.environ[var])
 					if var == LD_LIBRARY_PATH:
-						build_library_linkfarm(value)
+						rebuild_ld_library_path_linkfarm(value)
 					os.environ[var] = value
 					#print "set: %s=[%s]" % (var, os.environ[var])
 				for var in unset:

@@ -1,0 +1,49 @@
+#!/bin/bash
+
+# IPython executable name (because it could be ipython-2.7, for example...)
+IPY_NAME=$(basename "$0")
+
+# Find the real IPython executable
+while IFS='' read IPYTHON; do
+	# Skip over self
+	cmp -s "$0" "$IPYTHON" || break
+done < <(which -a "$IPY_NAME")
+
+# What's the variable that controls the dynamic linker lookup path?
+case $(uname) in
+	Darwin)
+		LDLP_NAME='DYLD_LIBRARY_PATH'
+		;;
+	*)
+		LDLP_NAME='LD_LIBRARY_PATH'
+		;;
+esac
+
+cleanup_temp_linkfarm()
+{
+	# Cautiously clean up the linkfarm
+	LIBDIR="$IPYTHON_EUPS_LIB_LINKFARM/lib"
+	if [[ -L "$LIBDIR" ]]; then
+		find "$LIBDIR/" -type l -delete		# Remove directory contents (expecting only symlinks!)
+		rmdir "$LIBDIR"/;			# Remove the directory itself
+		rm -f "$LIBDIR"				# Remove the symlink
+	fi
+	rmdir "$IPYTHON_EUPS_LIB_LINKFARM"		# Remove the linkfarm directory
+}
+
+# Create the linkfarm dir, prepend it to LD_LIBRARY_PATH
+if [[ -z $IPYTHON_EUPS_LIB_LINKFARM ]]; then
+	# Create a temporary linkfarm directory. The linkfarm will be in the lib/
+	# subdirectory of this directory.
+	export IPYTHON_EUPS_LIB_LINKFARM="$(mktemp -d -t ipython-eups-linkfarm.XXXXX)"
+
+	# Cleanup on exit
+	trap "{ cleanup_temp_linkfarm; }" EXIT
+fi
+#echo IPYTHON_EUPS_LIB_LINKFARM=$IPYTHON_EUPS_LIB_LINKFARM
+export $LDLP_NAME="$IPYTHON_EUPS_LIB_LINKFARM/lib:${!LDLP_NAME}"
+
+#echo $LDLP_NAME=${!LDLP_NAME}
+
+# Run the real IPython
+"$IPYTHON" "$@"
