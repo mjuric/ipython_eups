@@ -1,6 +1,6 @@
 from IPython.core.magic import (register_line_magic, register_cell_magic, register_line_cell_magic)
 import marshal, os, subprocess, sys, errno, tempfile, IPython, thread
-from IPython.utils.warn import (warn, error, info)
+from IPython.utils.warn import (warn, error)
 import textwrap
 
 if sys.platform == 'darwin':
@@ -140,7 +140,7 @@ def init_eups(eups_loc='default', eups_path=None, set_default=False):
 		""" % (setups_sh, eups_loc) ).replace('\n', ' ').replace('  ', '\n\n'))
 		return
 
-	info("Initializing EUPS from %s" % eups_loc)
+	print "Initializing EUPS from %s" % eups_loc
 
 	# Load the environment
 	cmd = r"""
@@ -161,16 +161,16 @@ for k, v in os.environ.iteritems():
 	if eups_path is not None:
 		os.environ['EUPS_PATH'] = eups_path
 
-	info("Using EUPS_PATH: %s" % os.environ['EUPS_PATH'])
+	print "Using EUPS_PATH: %s" % os.environ['EUPS_PATH']
 
 	if eups_loc != EUPS_DIR_DEFAULT:
 		if set_default:
 			if os.path.islink(EUPS_DIR_DEFAULT):
 				os.unlink(EUPS_DIR_DEFAULT)
 			os.symlink(eups_loc, EUPS_DIR_DEFAULT)
-			info("Setting as default: %s symlinked to %s" % (eups_loc, EUPS_DIR_DEFAULT))
+			print "Setting as default: %s symlinked to %s" % (eups_loc, EUPS_DIR_DEFAULT)
 		elif not os.path.islink(EUPS_DIR_DEFAULT):
-			info("To set this EUPS as default, rerun as `%%eups init --set-default %s'" % eups_loc)
+			print "To set this EUPS as default, rerun as `%%eups init --set-default %s'" % eups_loc
 
 # Re-initialize the link farm every time IPython is started, so that the environment
 # is properly cleaned of any left-overs from prior runs. E.g., this may happen
