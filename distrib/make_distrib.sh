@@ -1,4 +1,10 @@
 #!/bin/bash
+#
+# Usage: make_distrib.sh [--publish]
+#
+# If --publish is specify, scp the result so it's visible as
+# http://eupsforge.net/ipython
+#
 
 set -e
 
@@ -8,6 +14,8 @@ BIN_IPYTHON="$DIR/../bin/ipython"
 EUPS_MAGIC="$DIR/../python/eups_magic.py"
 
 DISTRIB_IPYTHON="$DIR/ipython"
+
+EUPSFORGE_PATH="mjuric@lsst-dev.ncsa.illinois.edu:public_html/eupsforge/ipython"
 
 # This must be the same as the eponymous variable in $BIN_IPYTHON script
 MAGIC="EMBEDDED""_PYTHON_MODULE----------"
@@ -35,3 +43,8 @@ echo "$MAGIC" >> "$DISTRIB_IPYTHON"
 cat "$EUPS_MAGIC" >> "$DISTRIB_IPYTHON"
 
 echo "The packed script has been created in $DISTRIB_IPYTHON"
+
+if [[ "$1" == "--publish" ]]; then
+	echo "Publishing to EUPSForge (http://eupsforge.net/ipython):"
+	scp "$DISTRIB_IPYTHON" "$EUPSFORGE_PATH"
+fi
