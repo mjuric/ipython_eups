@@ -34,7 +34,7 @@ echo "# THIS FILE WAS GENERATED WITH $(basename $0)." >> "$DISTRIB_IPYTHON"
 echo "#" >> "$DISTRIB_IPYTHON"
 echo "# git describe version: $(git describe --always --dirty)" >> "$DISTRIB_IPYTHON"
 echo "#" >> "$DISTRIB_IPYTHON"
-tail +2 "$BIN_IPYTHON" >> "$DISTRIB_IPYTHON"
+tail -n +2 "$BIN_IPYTHON" >> "$DISTRIB_IPYTHON"
 chmod +x "$DISTRIB_IPYTHON"
 
 echo "exit" >> "$DISTRIB_IPYTHON"
