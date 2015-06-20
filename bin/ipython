@@ -29,6 +29,13 @@ cleanup_temp_linkfarm()
 		rmdir "$RESOLVED_DIR"/;			# Remove the directory itself
 		rm -f "$LIBDIR"				# Remove the symlink
 	fi
+
+	PYDIR="$IPYTHON_EUPS_LIB_LINKFARM/python"	# Python directory for extracted module
+	if [[ -d "$PYDIR" ]]; then
+		rm -f "$PYDIR"/eups_magic.py*
+		rmdir "$PYDIR"
+	fi
+
 	rmdir "$IPYTHON_EUPS_LIB_LINKFARM"		# Remove the linkfarm directory
 }
 
@@ -45,6 +52,23 @@ fi
 export $LDLP_NAME="$IPYTHON_EUPS_LIB_LINKFARM/lib:${!LDLP_NAME}"
 
 #echo $LDLP_NAME=${!LDLP_NAME}
+
+# Check if the eups_magics.py module has been pasted to the end of ourselves
+EXTRACTPY=0
+MAGIC="EMBEDDED""_PYTHON_MODULE----------"
+if grep -q "$MAGIC" "$0"; then
+	# Extract the Python module into $IPYTHON_EUPS_LIB_LINKFARM/python
+	PYDIR="$IPYTHON_EUPS_LIB_LINKFARM/python"
+	mkdir -p "$PYDIR"
+
+	# Do the extraction; 
+	STARTLINE=$(grep -n "$MAGIC" "$0" | head -n 1 | cut -d : -f 1)
+	(( STARTLINE += 1 ))
+	tail +"$STARTLINE" "$0" > "$PYDIR/eups_magic.py"
+
+	# Add PYDIR to PYTHONPATH
+	export PYTHONPATH="$PYDIR:$PYTHONPATH"
+fi
 
 # Run the real IPython
 "$IPYTHON" "$@"
