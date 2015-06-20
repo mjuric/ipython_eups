@@ -1,10 +1,14 @@
 from IPython.core.magic import (register_line_magic, register_cell_magic, register_line_cell_magic)
 import marshal, os, subprocess, sys, errno, tempfile, IPython, thread
+from IPython.utils.warn import (warn, error, info)
+import textwrap
 
 if sys.platform == 'darwin':
 	LD_LIBRARY_PATH='DYLD_LIBRARY_PATH'
 else:
 	LD_LIBRARY_PATH='LD_LIBRARY_PATH'
+
+EUPS_DIR_DEFAULT = os.path.join(os.path.expanduser("~"), '.eups', 'default')
 
 def update_sys_path(new, old):
 	# update sys.path to reflect the new state of the PYTHONPATH
@@ -36,12 +40,11 @@ def rebuild_ld_library_path_linkfarm(paths):
 	try:
 		linkfarm = os.environ['IPYTHON_EUPS_LIB_LINKFARM']
 	except KeyError:
-		from IPython.utils.warn import error
 		error(
-			"The product you're setting up is attempting to modify %s, and\n" +
-			"IPython hasn't been started with ipython_eups support. It's likely that the\n" +
-			"product won't be setup-ed correctly.\n\n" +
-			"Maybe you forget to `setup ipython_eups' before starting ipython?" % LD_LIBRARY_PATH
+			("The product you're setting up is attempting to modify %s, and\n" +
+			"IPython hasn't been started via the ipython_eups wrapper. It's likely that the\n" +
+			"product won't be setup-ed correctly, so I'm refusing to prceed.\n\n" +
+			"Maybe you forgot to `setup ipython_eups' before starting ipython?") % LD_LIBRARY_PATH
 		)
 		return
 
@@ -90,17 +93,90 @@ def rebuild_ld_library_path_linkfarm(paths):
 		if oldlibdir is not None:
 			_purge_linkfarm(oldlibdir)
 	except Exception as e:
-		from IPython.utils.warn import warn
 		warn(str(e))
+
+def init_eups(eups_loc='default', eups_path=None, set_default=False):
+	"""
+		If the user forgot to run setups.sh, initialize EUPS
+		from scratch. Do it by running setups.sh and replacing our
+		current environment with the environment it will generate.
+		
+		Arguments:
+		
+		   eups_loc:    directory where EUPS is installed (where 
+		                bin/setups.sh will be found). If not
+		                given, a default from ~/.eups/default
+		                will be assumed
+
+		   eups_path:   The location of the EUPS product stack 
+		                (EUPS_PATH environment variable). Optional.
+		
+		   set_default: If set, eups_loc will be symlinked to
+		   		~/.eups/default.
+	"""
+
+	# Locate EUPS
+	if eups_loc == 'default':
+		if not os.path.isdir(EUPS_DIR_DEFAULT):
+			error(textwrap.dedent("""\
+				You're trying to initialize EUPS without specifying its location,
+				and the default in %(default)s does not exist (or is inaccessible).
+				
+				Either rerun the command as '%%eups init <eups_location>', or symlink
+				the path to EUPS (the location where 'bin/setups.sh' can be found)
+				as %(default)s .
+			""" % { 'default': EUPS_DIR_DEFAULT } ).replace('\n', ' ').replace('  ', '\n\n'))
+			return
+		else:
+			eups_loc = EUPS_DIR_DEFAULT
+
+	# Verify that EUPS exists
+	setups_sh = os.path.join(eups_loc, 'bin', 'setups.sh')
+	if not os.path.isfile(setups_sh):
+		error(textwrap.dedent("""\
+			Cannot find %s.
+			
+			Are you sure that EUPS has been installed in %s?
+		""" % (setups_sh, eups_loc) ).replace('\n', ' ').replace('  ', '\n\n'))
+		return
+
+	info("Initializing EUPS from %s" % eups_loc)
+
+	# Load the environment
+	cmd = r"""
+source %(setups_sh)s >/dev/null
+%(python)s -c '
+import os, sys;
+for k, v in os.environ.iteritems():
+    sys.stdout.write("%%s\0%%s\0" %% (k, v))
+'""" % { 'python' : sys.executable, 'setups_sh' : setups_sh }
+
+	envl = subprocess.check_output(cmd, shell=True).split('\0')
+	env = { k: v for k, v in zip(envl[::2], envl[1::2]) }
+
+	os.environ.clear()
+	os.environ.update(dict=env)
+
+	# Override EUPS_PATH, if requested
+	if eups_path is not None:
+		os.environ['EUPS_PATH'] = eups_path
+
+	info("Using EUPS_PATH: %s" % os.environ['EUPS_PATH'])
+
+	if eups_loc != EUPS_DIR_DEFAULT:
+		if set_default:
+			if os.path.islink(EUPS_DIR_DEFAULT):
+				os.unlink(EUPS_DIR_DEFAULT)
+			os.symlink(eups_loc, EUPS_DIR_DEFAULT)
+			info("Setting as default: %s symlinked to %s" % (eups_loc, EUPS_DIR_DEFAULT))
+		elif not os.path.islink(EUPS_DIR_DEFAULT):
+			info("To set this EUPS as default, rerun as `%%eups init --set-default %s'" % eups_loc)
 
 # Re-initialize the link farm every time IPython is started, so that the environment
 # is properly cleaned of any left-overs from prior runs. E.g., this may happen
 # when IPython notebook kernel is restarted by the user.
 if 'IPYTHON_EUPS_LIB_LINKFARM' in os.environ and LD_LIBRARY_PATH in os.environ:
-	rebuild_ld_library_path_linkfarm(os.environ['LD_LIBRARY_PATH'])
-
-#rebuild_ld_library_path_linkfarm('/Users/mjuric/projects/eups/stack/DarwinX86/oorb/lsst-g650e0a6f6c/lib:/Users/mjuric/projects/eupsforge/ups_db/DarwinX86/node/master-g585d2d3511/ups')
-#exit()
+	rebuild_ld_library_path_linkfarm(os.environ[LD_LIBRARY_PATH])
 
 def eups(line):
 	"my line magic"
@@ -110,7 +186,6 @@ def eups(line):
 	from collections import OrderedDict
 
 	from IPython import display
-	from IPython.utils.warn import (warn, error)
 
 	split = line.split()
 	cmd, args = split[0], split[1:]
@@ -119,7 +194,13 @@ def eups(line):
 		cmd = "setup"
 		args.insert(0, '--unsetup')
 
-	if cmd == "setup":
+	if cmd == "init":
+		# find the '--set-default' flag
+		set_default = '--set-default' in args
+		if set_default:
+			args.remove('--set-default')
+		return init_eups(*args, set_default=set_default)
+	elif cmd == "setup":
 		# run 'setup'
 		setupimpl = os.path.join(os.environ['EUPS_DIR'], 'bin/eups_setup_impl.py')
 		setupcmd = "python '%s' %s" % (setupimpl, ' '.join(args))
@@ -181,6 +262,15 @@ def load_ipython_extension(ipython):
 	# instance, which can be used in any way. This allows you to register
 	# new magics or aliases, for example.
 	ipython.register_magic_function(eups)
+
+	# Check if EUPS has been setup, if not, try to set it up
+	# from the default environment.
+	if 'EUPS_DIR' not in os.environ:
+		if os.path.isdir(EUPS_DIR_DEFAULT):
+			init_eups()
+		else:
+			warn(("EUPS not initialized, and no default EUPS has been symlinked as %s. " +
+			      "Make sure to initialize it with `%%eups init <path_to_eups>'") % EUPS_DIR_DEFAULT)
 
 #def unload_ipython_extension(ipython):
 #	# If you want your extension to be unloadable, put that logic here.
