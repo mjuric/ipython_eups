@@ -248,14 +248,37 @@ def eups(line):
 					#print "unset: " + var
 					del os.environ[var]
 	else:
+		#setupcmd = "script -q /dev/null ~/bin/tst.py"
+		#setupcmd = "script -q /dev/null eups %s %s 1>&2" % (cmd, ' '.join(args))
+		#setupcmd = "~/bin/tst.py"
 		setupcmd = "eups %s %s" % (cmd, ' '.join(args))
 
-		# run EUPS
-		try:
-			ret = subprocess.check_output(setupcmd, stderr=subprocess.STDOUT, shell=True).rstrip()
-			print ret
-		except subprocess.CalledProcessError as e:
-			error("%s\n%s" % (str(e), e.output))
+		with tempfile.NamedTemporaryFile() as fp:
+			# test for existance and flavor of 'script'. If it exists,
+			# run setupcmd through it so we can get unbuffered stdio.
+			# See http://stackoverflow.com/a/1402389/897575 for details.
+			#
+			# The named temporary file helps us safely execute the command
+			# line on Linux, if it had quoted arguments (script -c expects
+			# a single arg. on Linux)
+			if os.path.exists('/usr/bin/script'):
+				print >>fp, setupcmd
+				fp.flush()
+
+				if sys.platform == 'darwin':
+					setupcmd = "script -q /dev/null sh %s" % fp.name
+				else:
+					setupcmd = "script -q /dev/null -c 'sh %s'" % fp.name
+
+			#print setupcmd
+			# run EUPS
+			try:
+				pipe = subprocess.Popen(setupcmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE, shell=True)
+				for line in iter(lambda : pipe.stdout.read(1), ""):
+					sys.stdout.write(line)
+					sys.stdout.flush()
+			except subprocess.CalledProcessError as e:
+				error("%s\n%s" % (str(e), e.output))
 
 def load_ipython_extension(ipython):
 	# The `ipython` argument is the currently active `InteractiveShell`
