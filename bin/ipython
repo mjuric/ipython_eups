@@ -76,5 +76,23 @@ if grep -q "$MAGIC" "$0"; then
 	export PYTHONPATH="$PYDIR:$PYTHONPATH"
 fi
 
+# We'll trap and disable SIGINT (CTRL-C handling). IPython is typically
+# exited by hitting CTRL-C twice (or more...). The second CTRL-C gets
+# passed down to us. If this is a packed script, this CTRL-C (or one of 
+# the subsequent ones) may interrupt the 'exit' that separated the
+# body of the bash script and the embedded python code (see
+# distrib/make_distrib.sh for details). When that happens, bash attempts
+# to execute Python as bash and reports errors to the terminal. These are
+# potentially confusing to the user.
+#
+# To avoid that, we trap CTRL-C at this point. We cannot disable it,
+# however, as child processess inherid signal handlers, and if started 
+# with SIGINT disabled they cannot it re-enable. We therefore trap it
+# into a code snippet that disables it the first time it's caught (and
+# it can only get caught once we've exited IPython, **or** if the user
+# hits CTRL-C in the short interval between setting the trap and
+# executing IPython (which is a race condition we'll have to live with).
+trap '{ trap "" SIGINT; }' SIGINT
+
 # Run the real IPython
 "$IPYTHON" "$@"
