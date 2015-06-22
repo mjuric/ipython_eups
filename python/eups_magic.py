@@ -140,7 +140,7 @@ def init_eups(eups_loc='default', eups_path=None, set_default=False):
 		""" % (setups_sh, eups_loc) ).replace('\n', ' ').replace('  ', '\n\n'))
 		return
 
-	print "Initializing EUPS from %s" % eups_loc
+	print "Initializing EUPS from: %s" % eups_loc
 
 	# Load the environment
 	cmd = r"""
@@ -178,6 +178,14 @@ for k, v in os.environ.iteritems():
 if 'IPYTHON_EUPS_LIB_LINKFARM' in os.environ and LD_LIBRARY_PATH in os.environ:
 	rebuild_ld_library_path_linkfarm(os.environ[LD_LIBRARY_PATH])
 
+def _get_setuped_product_version(product):
+	try:
+		setupcmd = "eups list -s %s" % product
+		ret = subprocess.check_output(setupcmd, stderr=subprocess.STDOUT, shell=True)
+		return ret.rstrip().split()[0]
+	except subprocess.CalledProcessError as e:
+		return None
+
 def eups(line):
 	"my line magic"
 
@@ -193,6 +201,9 @@ def eups(line):
 	if cmd == "unsetup":
 		cmd = "setup"
 		args.insert(0, '--unsetup')
+		unsetup = True
+	else:
+		unsetup = False
 
 	if cmd == "init":
 		# find the '--set-default' flag
@@ -202,51 +213,70 @@ def eups(line):
 		return init_eups(*args, set_default=set_default)
 	elif cmd == "setup":
 		# run 'setup'
+		args2 = [ arg for arg in args if not arg.startswith('-') ]
+		product = args2[0] if args2 else None
+
+		# If this is an unsetup call, remember the version for printing at the end
+		if unsetup:
+			version = _get_setuped_product_version(product)
+
 		setupimpl = os.path.join(os.environ['EUPS_DIR'], 'bin/eups_setup_impl.py')
 		setupcmd = "python '%s' %s" % (setupimpl, ' '.join(args))
 
 		try:
-			ret = subprocess.check_output(setupcmd, stderr=subprocess.STDOUT, shell=True).strip().split('\n')
+			ret = subprocess.check_output(setupcmd, stderr=subprocess.STDOUT, shell=True).strip()
 		except subprocess.CalledProcessError as e:
 			error("%s\n%s" % (str(e), e.output))
 		else:
-			if not len(ret) or ret[-1] == 'false':
-				# setup failed; return the error message
-				error(str('\n'.join(ret[:-1])))
+			if product is None:
+				# If the user ran something like 'setup -h', just print out the result
+				print ret
 			else:
-				exportRe = re.compile('export\s+(\w+)=(.*?);?$')
-				unsetRe  = re.compile('unset\s+(\w+);?$')
-				export = OrderedDict()
-				unset  = set()
-				for line in ret[:-1]:
-					m = exportRe.match(line)
-					if m:
-						export[m.group(1)] = m.group(2)
-						continue
+				ret = ret.split('\n')
+				if not len(ret) or ret[-1] == 'false':
+					# setup failed; return the error message
+					error(str('\n'.join(ret[:-1])))
+				else:
+					exportRe = re.compile('export\s+(\w+)=(.*?);?$')
+					unsetRe  = re.compile('unset\s+(\w+);?$')
+					export = OrderedDict()
+					unset  = set()
+					for line in ret[:-1]:
+						m = exportRe.match(line)
+						if m:
+							export[m.group(1)] = m.group(2)
+							continue
 
-					m = unsetRe.match(line)
-					if m:
-						unset.add(m.group(1))
-						continue
+						m = unsetRe.match(line)
+						if m:
+							unset.add(m.group(1))
+							continue
 				
-					error("EUPS told me to '%s' but I don't know how to handle that. Aborting." % (line))
+						error("EUPS told me to '%s' but I don't know how to handle that. Aborting." % (line))
 
-				# do the variable (un)setups. We do this only after
-				# the entire output is processed above, to avoid
-				# aborting half-way in case of errors (and leaving
-				# the environment in an incoherent state).
+					# do the variable (un)setups. We do this only after
+					# the entire output is processed above, to avoid
+					# aborting half-way in case of errors (and leaving
+					# the environment in an incoherent state).
 
-				for var, value in export.iteritems():
-					value = subprocess.check_output('/bin/echo -n %s' % value, shell=True)
-					if var == "PYTHONPATH":
-						update_sys_path(value, os.environ[var])
-					if var == LD_LIBRARY_PATH:
-						rebuild_ld_library_path_linkfarm(value)
-					os.environ[var] = value
-					#print "set: %s=[%s]" % (var, os.environ[var])
-				for var in unset:
-					#print "unset: " + var
-					del os.environ[var]
+					for var, value in export.iteritems():
+						value = subprocess.check_output('/bin/echo -n %s' % value, shell=True)
+						if var == "PYTHONPATH":
+							update_sys_path(value, os.environ[var])
+						if var == LD_LIBRARY_PATH:
+							rebuild_ld_library_path_linkfarm(value)
+						os.environ[var] = value
+						#print "set: %s=[%s]" % (var, os.environ[var])
+					for var in unset:
+						#print "unset: " + var
+						del os.environ[var]
+
+				if not unsetup:
+					version = _get_setuped_product_version(product)
+
+				# print out some useful info about what we've just setup-ed
+				print "product %s: %s, version: %s" % ('setup' if not unsetup else 'unsetup', product, version)
+
 	else:
 		setupcmd = "eups %s %s" % (cmd, ' '.join(args))
 		from IPython.utils.process import system
@@ -258,6 +288,11 @@ def load_ipython_extension(ipython):
 	# instance, which can be used in any way. This allows you to register
 	# new magics or aliases, for example.
 	ipython.register_magic_function(eups)
+
+	#print "-----------------------------------------------------------------------"
+	#print "Note to readers: if you don't have ipython_eups installed, get it from"
+	#print "     http://github.com/mjuric/ipython_eups to enable eups_magic."
+	#print "-----------------------------------------------------------------------"
 
 	# Check if EUPS has been setup, if not, try to set it up
 	# from the default environment.
