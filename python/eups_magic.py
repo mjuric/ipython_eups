@@ -2,6 +2,7 @@ from IPython.core.magic import (register_line_magic, register_cell_magic, regist
 import marshal, os, subprocess, sys, errno, tempfile, IPython, thread
 from IPython.utils.warn import (warn, error)
 import textwrap
+from IPython.display import (publish_display_data, clear_output)
 
 if sys.platform == 'darwin':
 	LD_LIBRARY_PATH='DYLD_LIBRARY_PATH'
@@ -9,6 +10,18 @@ else:
 	LD_LIBRARY_PATH='LD_LIBRARY_PATH'
 
 EUPS_DIR_DEFAULT = os.path.join(os.path.expanduser("~"), '.eups', 'default')
+
+def display(text=None, markdown=None):
+	data = {}
+
+	# default text to markdown
+	if not text and markdown:
+		text = markdown
+
+	if text: 	data['text/plain']    = text
+	if markdown:	data['text/markdown'] = markdown
+
+	publish_display_data(data)
 
 def update_sys_path(new, old):
 	# update sys.path to reflect the new state of the PYTHONPATH
@@ -140,10 +153,9 @@ def init_eups(eups_loc='default', eups_path=None, set_default=False):
 		""" % (setups_sh, eups_loc) ).replace('\n', ' ').replace('  ', '\n\n'))
 		return
 
-	print "Initializing EUPS from: %s" % eups_loc
-
-	# Load the environment
-	cmd = r"""
+	try:
+		# Load the environment
+		cmd = r"""
 source %(setups_sh)s >/dev/null
 %(python)s -c '
 import os, sys;
@@ -151,32 +163,39 @@ for k, v in os.environ.iteritems():
     sys.stdout.write("%%s\0%%s\0" %% (k, v))
 '""" % { 'python' : sys.executable, 'setups_sh' : setups_sh }
 
-	envl = subprocess.check_output(cmd, shell=True).split('\0')
-	env = { k: v for k, v in zip(envl[::2], envl[1::2]) }
+		envl = subprocess.check_output(cmd, shell=True).split('\0')
+		env = { k: v for k, v in zip(envl[::2], envl[1::2]) }
 
-	os.environ.clear()
-	os.environ.update(dict=env)
+		os.environ.clear()
+		os.environ.update(dict=env)
 
-	# Override EUPS_PATH, if requested
-	if eups_path is not None:
-		os.environ['EUPS_PATH'] = eups_path
-
-	print "Using EUPS_PATH: %s" % os.environ['EUPS_PATH']
+		# Override EUPS_PATH, if requested
+		if eups_path is not None:
+			os.environ['EUPS_PATH'] = eups_path
+	finally:
+		# Why do this in a finally clause?
+		# a) we want to print out the messages about eups_loc and
+		#    the message about EUPS_PATH in the same Markdown block,
+		#    so they look nice on the screen.
+		# b) but we also want the message about eups_loc to be printed
+		#    no matter what, so the user is given information about where
+		#    eups is being loaded from in case anything went wrong.
+		markdown = "**``%%eups init:``** loading EUPS from `%s`." % eups_loc
+		if 'EUPS_PATH' in os.environ:
+			markdown += "  \n**``%%eups init:``** using `EUPS_PATH=%s`." % os.environ['EUPS_PATH']
+		display(markdown=markdown)
 
 	if eups_loc != EUPS_DIR_DEFAULT:
 		if set_default:
 			if os.path.islink(EUPS_DIR_DEFAULT):
 				os.unlink(EUPS_DIR_DEFAULT)
-			os.symlink(eups_loc, EUPS_DIR_DEFAULT)
-			print "Setting as default: %s symlinked to %s" % (eups_loc, EUPS_DIR_DEFAULT)
-		elif not os.path.islink(EUPS_DIR_DEFAULT):
-			print "To set this EUPS as default, rerun as `%%eups init --set-default %s'" % eups_loc
 
-# Re-initialize the link farm every time IPython is started, so that the environment
-# is properly cleaned of any left-overs from prior runs. E.g., this may happen
-# when IPython notebook kernel is restarted by the user.
-if 'IPYTHON_EUPS_LIB_LINKFARM' in os.environ and LD_LIBRARY_PATH in os.environ:
-	rebuild_ld_library_path_linkfarm(os.environ[LD_LIBRARY_PATH])
+			msg="**``%%eups init:``** symlinking `%s` -> `%s`" % (EUPS_DIR_DEFAULT, eups_loc)
+			display(markdown=msg)
+
+			os.symlink(eups_loc, EUPS_DIR_DEFAULT)
+		elif not os.path.islink(EUPS_DIR_DEFAULT):
+			print "To set this EUPS as default, rerun with `%%eups init --set-default %s'" % eups_loc
 
 def _get_setuped_product_version(product):
 	try:
@@ -192,8 +211,6 @@ def eups(line):
 	import sys, os, os.path, re
 	import subprocess
 	from collections import OrderedDict
-
-	from IPython import display
 
 	split = line.split()
 	cmd, args = split[0], split[1:]
@@ -275,8 +292,8 @@ def eups(line):
 					version = _get_setuped_product_version(product)
 
 				# print out some useful info about what we've just setup-ed
-				print "product %s: %s, version: %s" % ('setup' if not unsetup else 'unsetup', product, version)
-
+				msg = "**``%%eups %s:``** `%s`, version `%s`" % ('setup' if not unsetup else 'unsetup', product, version)
+				display(markdown=msg)
 	else:
 		setupcmd = "eups %s %s" % (cmd, ' '.join(args))
 		from IPython.utils.process import system
@@ -287,12 +304,76 @@ def load_ipython_extension(ipython):
 	# The `ipython` argument is the currently active `InteractiveShell`
 	# instance, which can be used in any way. This allows you to register
 	# new magics or aliases, for example.
-	ipython.register_magic_function(eups)
+
+	# Sanity checks. Do as many of these as necessary, to make sure we catch issues
+	# early on that may cause difficult-to-debug misbehaviors later.
+	#
+	# Refuse to proceed if there's no pointer to the linkfarm in the environment,
+	# or the linkfarm doesn't exist, or the linkfarm dir isn't in LD_LIBRARY_PATH.
+	# The most likely cause of this is not having started ipython via the
+	# supplied 'ipython' wrapper script, or some bug in the wrapper itself.
+	if 'IPYTHON_EUPS_LIB_LINKFARM' not in os.environ:
+		raise Exception(textwrap.dedent("""\
+			It looks like IPython hasn't been started using the 'ipython' wrapper
+			script supplied by ipython_eups. Maybe you forgot to add it to your path?
+			
+			Guru Meditation: IPYTHON_EUPS_LIB_LINKFARM environmental variable has not
+			been set. The aforementioned wrapper script sets this variable before
+			calling IPython.
+		""").replace('\n', ' ').replace('  ', '\n\n'))
+
+	linkfarm = os.environ['IPYTHON_EUPS_LIB_LINKFARM']
+	if not os.path.isdir(linkfarm):
+		raise Exception(textwrap.dedent("""\
+			Something is amiss with how ipython_eups has been started; directories
+			that are needed for %eups to work don't exist. Try restarting IPython
+			and see if the problem clears up.
+			
+			Guru Meditation: The directory that IPYTHON_EUPS_LIB_LINKFARM
+			environmental variable points to -- %(linkfarm)s -- does not exist. This
+			directory is supposed to be created by the 'ipython' wrapper script.
+		""" % { 'linkfarm': linkfarm } ).replace('\n', ' ').replace('  ', '\n\n'))
+
+	if LD_LIBRARY_PATH not in os.environ:
+		raise Exception(textwrap.dedent("""\
+			Something is amiss with ipython_eups. Try restarting IPython and see if
+			the problem clears up.
+			
+			Guru Meditation: The %(lddir)s environment variable has not been set.
+			This variable was supposed to be created by the 'ipython' wrapper script.
+			You may have uncovered a bug in the wrapper script.
+		""" % { 'lddir': LD_LIBRARY_PATH } ).replace('\n', ' ').replace('  ', '\n\n'))
+
+	liblinkfarm = os.path.join(linkfarm, 'lib')
+	if liblinkfarm not in os.environ[LD_LIBRARY_PATH].split(':'):
+		print os.environ[LD_LIBRARY_PATH].split(':')
+		raise Exception(textwrap.dedent("""\
+			Something is amiss with ipython_eups. Try restarting IPython and see if
+			the problem clears up.
+			
+			Guru Meditation: The "library linkfarm" directory exists [== %(linkfarm)s], but
+			isn't on %(lddir)s [== %(ldpath)s]. It was supposed to be added to it by
+			the 'ipython' wrapper script. This may be a bug in the wrapper script.
+		""" % { 'lddir': LD_LIBRARY_PATH, 'linkfarm' : liblinkfarm, 'ldpath' : os.environ[LD_LIBRARY_PATH] } 
+		    ).replace('\n', ' ').replace('  ', '\n\n'))
+
+
+	# Re-initialize the link farm every time IPython is started, so that the environment
+	# is properly cleaned of any left-overs from prior runs. E.g., this may happen
+	# when IPython notebook kernel is restarted by the user.
+	rebuild_ld_library_path_linkfarm(os.environ[LD_LIBRARY_PATH])
 
 	#print "-----------------------------------------------------------------------"
 	#print "Note to readers: if you don't have ipython_eups installed, get it from"
 	#print "     http://github.com/mjuric/ipython_eups to enable eups_magic."
 	#print "-----------------------------------------------------------------------"
+
+	# Register %eups magic
+	ipython.register_magic_function(eups)
+
+	display(  text="[load_ext]: %eups magics loaded. Docs+source at http://github.com/mjuric/ipython_eups.",
+		  markdown="``%eups`` magics loaded. Documentation and source at http://github.com/mjuric/ipython_eups."
+	)
 
 	# Check if EUPS has been setup, if not, try to set it up
 	# from the default environment.
