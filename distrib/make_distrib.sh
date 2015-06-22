@@ -17,6 +17,8 @@ DISTRIB_IPYTHON="$DIR/ipython"
 
 EUPSFORGE_PATH="mjuric@lsst-dev.ncsa.illinois.edu:public_html/eupsforge/ipython"
 
+VERSION=$(git describe --always --dirty)
+
 # This must be the same as the eponymous variable in $BIN_IPYTHON script
 MAGIC="EMBEDDED""_PYTHON_MODULE----------"
 
@@ -32,7 +34,7 @@ echo "#" >> "$DISTRIB_IPYTHON"
 echo "# GENERATED FILE. DO NOT EDIT. THE SOURCE IS IN bin/ipython" >> "$DISTRIB_IPYTHON"
 echo "# THIS FILE WAS GENERATED WITH $(basename $0)." >> "$DISTRIB_IPYTHON"
 echo "#" >> "$DISTRIB_IPYTHON"
-echo "# git describe version: $(git describe --always --dirty)" >> "$DISTRIB_IPYTHON"
+echo "# git describe version: $VERSION" >> "$DISTRIB_IPYTHON"
 echo "#" >> "$DISTRIB_IPYTHON"
 tail -n +2 "$BIN_IPYTHON" >> "$DISTRIB_IPYTHON"
 chmod +x "$DISTRIB_IPYTHON"
@@ -41,6 +43,9 @@ echo "exit" >> "$DISTRIB_IPYTHON"
 echo >> "$DISTRIB_IPYTHON"
 echo "$MAGIC" >> "$DISTRIB_IPYTHON"
 cat "$EUPS_MAGIC" >> "$DISTRIB_IPYTHON"
+
+# Embed the version string into the Python module
+sed -i.bak "s|%%VERSION-NOT-SET-RUNNING-FROM-SOURCE%%|$VERSION|" "$DISTRIB_IPYTHON"
 
 echo "The packed script has been created in $DISTRIB_IPYTHON"
 

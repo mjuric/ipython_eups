@@ -4,6 +4,10 @@ from IPython.utils.warn import (warn, error)
 import textwrap
 from IPython.display import (publish_display_data, clear_output)
 
+# This will be populated by distrib/make_distrib.sh. Don't change
+# the magic value, unless you change it in make_distrib.sh as well.
+__version__ = "%%VERSION-NOT-SET-RUNNING-FROM-SOURCE%%"
+
 if sys.platform == 'darwin':
 	LD_LIBRARY_PATH='DYLD_LIBRARY_PATH'
 else:
@@ -294,6 +298,9 @@ def eups(line):
 				# print out some useful info about what we've just setup-ed
 				msg = "**``%%eups %s:``** `%s`, version `%s`" % ('setup' if not unsetup else 'unsetup', product, version)
 				display(markdown=msg)
+	elif cmd == "version":
+		msg = "**``%%eups version:``** `%s`" % (__version__)
+		display(markdown=msg)
 	else:
 		setupcmd = "eups %s %s" % (cmd, ' '.join(args))
 		from IPython.utils.process import system
