@@ -3,10 +3,16 @@
 # IPython executable name (because it could be ipython-2.7, for example...)
 IPY_NAME=$(basename "$0")
 
+SELFMAGIC="__ipython_eups_trampoline_script_file__"
+
 # Find the real IPython executable
 while IFS='' read IPYTHON; do
 	# Skip over self
-	cmp -s "$0" "$IPYTHON" || break
+	cmp -s "$0" "$IPYTHON" && continue
+	# Skip over any file that looks like an older (or packed) version of self
+	grep -q "$SELFMAGIC" "$IPYTHON" && continue
+	# Found acceptable IPython
+	break
 done < <(which -a "$IPY_NAME")
 
 # What's the variable that controls the dynamic linker lookup path?
