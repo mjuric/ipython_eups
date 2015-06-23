@@ -17,9 +17,19 @@ if sys.platform == 'darwin':
 else:
 	LD_LIBRARY_PATH='LD_LIBRARY_PATH'
 
+# The location of the symlink to default EUPS
+#
+# This EUPS will be sourced if `%eups init' is called w/o an argument and
+# also when the extension is loaded and no EUPS_DIR exists in the
+# environment.
+#
 EUPS_DIR_DEFAULT = os.path.join(os.path.expanduser("~"), '.eups', 'default')
 
 def display(markdown, text=None):
+	"""
+	Display the given markdown, down-converting it to text
+	if no text version of the message is given.
+	"""
 	data = {}
 
 	# default text to markdown
@@ -34,8 +44,9 @@ def display(markdown, text=None):
 	IPython.display.display(data, raw=True)
 
 def update_sys_path(new, old):
-	# update sys.path to reflect the new state of the PYTHONPATH
-	# variable, while retaining
+	"""
+	Update sys.path to reflect the new state of the PYTHONPATH variable.
+	"""
 
 	env = dict(os.environ)
 	env['PYTHONPATH'] = new
@@ -50,7 +61,9 @@ for p in sys.path:
 	sys.path = pypath
 
 def _purge_linkfarm(libdir):
-	# delete the directory
+	"""
+	Delete all links from the linkfarm.
+	"""
 	for fn in os.listdir(libdir):
 		fn = os.path.join(libdir, fn)
 		if not os.path.islink(fn):
@@ -59,35 +72,41 @@ def _purge_linkfarm(libdir):
 	os.rmdir(libdir)
 
 def rebuild_ld_library_path_linkfarm(paths):
-	# Make sure we have a linkfarm to work with
-	try:
-		linkfarm = os.environ['IPYTHON_EUPS_LIB_LINKFARM']
-	except KeyError:
-		error(
-			("The product you're setting up is attempting to modify %s, and\n" +
-			"IPython hasn't been started via the ipython_eups wrapper. It's likely that the\n" +
-			"product won't be setup-ed correctly, so I'm refusing to prceed.\n\n" +
-			"Maybe you forgot to `setup ipython_eups' before starting ipython?") % LD_LIBRARY_PATH
-		)
-		return
+	"""
+	Populate the dynamic library linkfarm with files found in the
+	:-delimited path.
 
-	# create a temporary $linkfarm/lib directory
+	Any existing linkfarm content will be purged first.
+	"""
+
+	# The $linkfarm/lib directory (which is on LD_LIBRARY_PATH) is
+	# actually a symlink to the directory where the linkfarm truly is. 
+	# Having it be a symlink lets us atomically replace an old linkfarm
+	# with a new one.  That avoids race conditions if two IPython
+	# instances are trying to rebuild the linkfarm at the same time
+	# (possible if, for example, the user is running multiprocessing).
+
+	# Create a new, unique, $linkfarm/lib directory. We will symlink to
+	# $linkfarm/lib at the very end.
+	linkfarm = os.environ['IPYTHON_EUPS_LIB_LINKFARM']
 	dest = tempfile.mkdtemp(prefix='ipython-eups-linkfarm.%d.' % os.getpid(), dir=linkfarm)
 
-	# link all items in paths into the joint path
+	# build the linkfarm from entries on path
 	for path in paths.split(':'):
 		if not path:
 			continue
 
+		# skip anything in the linkfarm directory (i.e.,
+		# $linkfarm/lib)
 		if path.startswith(linkfarm + os.path.sep):
 			continue
 
+		# skip anything that isn't a directory (guard against
+		# invalid entries on the LD_LIBRARY_PATH)
 		if not os.path.isdir(path):
 			continue
 
-#		print "LINKING: %s" % path
-#		print "     LF: %s" % linkfarm
-
+		# link all items in paths into the joint path
 		path = os.path.realpath(path)
 		for fn in os.listdir(path):
 			src = os.path.join(path, fn)
@@ -101,10 +120,13 @@ def rebuild_ld_library_path_linkfarm(paths):
 					raise
 
 
+	# atomically repoint $linkfarm/lib to the newly constructed
+	# directory. Note how we're creating a new symlink, and then use
+	# os.rename() to rename it to 'lib', taking advantage of the fact
+	# that renames are atomic on POSIX-compliant filesystems.
 	libdir = os.path.join(linkfarm, 'lib')
 	oldlibdir = os.path.realpath(libdir) if os.path.exists(libdir) else None
 
-	# atomic replacement of the old directory
 	tmplink = '%s.%d.%d' % (dest, thread.get_ident(), os.getpid())	# Unique temporary name
 	os.symlink(os.path.basename(dest), tmplink)
 	os.rename(tmplink, libdir)
@@ -208,6 +230,9 @@ for k, v in os.environ.iteritems():
 			print "To set this EUPS as default, rerun with `%%eups init --set-default %s'" % eups_loc
 
 def _get_setuped_product_version(product):
+	"""
+	Returns the setup-ed version of <product>
+	"""
 	try:
 		setupcmd = "eups list -s %s" % product
 		ret = subprocess.check_output(setupcmd, stderr=subprocess.STDOUT, shell=True)
@@ -338,9 +363,9 @@ def eups(line):
 		IPython.utils.process.system(setupcmd)
 
 def load_ipython_extension(ipython):
-	# The `ipython` argument is the currently active `InteractiveShell`
-	# instance, which can be used in any way. This allows you to register
-	# new magics or aliases, for example.
+	"""
+	Load the %eups extension. IPython extension API entry point.
+	"""
 
 	# Sanity checks. Do as many of these as necessary, to make sure we catch issues
 	# early on that may cause difficult-to-debug misbehaviors later.
