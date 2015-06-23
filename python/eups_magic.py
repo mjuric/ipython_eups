@@ -1,9 +1,12 @@
-from IPython.core.magic import (register_line_magic, register_cell_magic, register_line_cell_magic)
-import marshal, os, subprocess, sys, errno, tempfile, IPython, thread
+import os, os.path, errno, tempfile
+import sys, subprocess, thread
+import re, textwrap
+import collections
+
+import IPython.display		# for display()
+import IPython.utils.process	# for system()
+
 from IPython.utils.warn import (warn, error)
-import textwrap
-from IPython.display import (clear_output)
-import IPython.display
 
 # This will be populated by distrib/make_distrib.sh. Don't change
 # the magic value, unless you change it in make_distrib.sh as well.
@@ -215,10 +218,6 @@ def _get_setuped_product_version(product):
 def eups(line):
 	"my line magic"
 
-	import sys, os, os.path, re
-	import subprocess
-	from collections import OrderedDict
-
 	split = line.split()
 	cmd, args = split[0], split[1:]
 
@@ -263,7 +262,7 @@ def eups(line):
 				else:
 					exportRe = re.compile('export\s+(\w+)=(.*?);?$')
 					unsetRe  = re.compile('unset\s+(\w+);?$')
-					export = OrderedDict()
+					export = collections.OrderedDict()
 					unset  = set()
 					for line in ret[:-1]:
 						m = exportRe.match(line)
@@ -306,9 +305,8 @@ def eups(line):
 		display(msg)
 	else:
 		setupcmd = "eups %s %s" % (cmd, ' '.join(args))
-		from IPython.utils.process import system
 		
-		system(setupcmd)
+		IPython.utils.process.system(setupcmd)
 
 def load_ipython_extension(ipython):
 	# The `ipython` argument is the currently active `InteractiveShell`
@@ -401,10 +399,6 @@ def load_ipython_extension(ipython):
 # https://gist.github.com/possatti/8918a324fa83acbd191b
 # by Lucas Possatti
 #
-
-import re
-import sys
-import collections
 
 plain_rules = collections.OrderedDict()
 plain_rules[r'\[([^\[]+)\]\(([^\)]+)\)'] = r'\1 (at \2)' # links
