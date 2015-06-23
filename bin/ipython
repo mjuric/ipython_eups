@@ -1,4 +1,17 @@
 #!/bin/bash
+# ==========================================================================
+#
+# Copyright 2015 Mario Juric <mjuric@astro.washington.edu> and others.
+#
+# See the COPYRIGHT file at the top-level directory of this distribution and
+# at http://github.com/mjuric/ipython_eups/COPYRIGHT
+#
+# This file is part of ipython_eups. It is subject to the license terms in
+# the LICENSE file found in the top-level directory of this distribution and
+# at http://github.com/mjuric/ipython_eups/LICENSE.  No part of
+# ipython_eups, including this file, may be copied, modified, propagated, or
+# distributed except according to the terms contained in the LICENSE file.
+#
 
 # IPython executable name (because it could be ipython-2.7, for example...)
 IPY_NAME=$(basename "$0")

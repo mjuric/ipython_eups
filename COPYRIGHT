@@ -1,0 +1,13 @@
+ipython_eups IPython Extension
+==============================
+
+Copyright 2015 Mario Juric <mjuric@astro.washington.edu> and licensed under
+the Apache License, Version 2.0
+
+This work contains code from Lucas Possatti
+(https://gist.github.com/possatti/8918a324fa83acbd191b), licensed under the
+MIT LICENSE (http://opensource.org/licenses/MIT).
+
+Some parts of this work were inspired by the work of Johnny Broadway on
+Slimdown (https://gist.github.com/jbroadway/2836900), licensed under the MIT
+LICENSE (http://opensource.org/licenses/MIT).
