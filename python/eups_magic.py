@@ -216,7 +216,36 @@ def _get_setuped_product_version(product):
 		return None
 
 def eups(line):
-	"my line magic"
+	"""\
+	Setup and unsetup EUPS products from within IPython
+
+	Common usage:
+
+	    # Set up a product
+	    %eups setup <product>
+
+	    # Unsetup a product
+	    %eups unsetup <product>
+
+	If no EUPS has been setup (i.e., you didn't source setups.sh before
+	starting IPython), the default EUPS will be set up once this
+	extension is loaded with %load_ext. You can also set it up manually
+	with %eups init (see below).
+
+	More examples:
+
+	    # Initialize EUPS
+	    %eups init [[--set-default] path_to_eups [EUPS_PATH]]
+
+	    # Version of ipython_eups script
+	    %eups version
+
+	    # EUPS subcommands are passed on to EUPS
+	    %eups list
+	    %eups --version
+
+	More documentation on http://github.com/mjuric/ipython_eups.
+	"""
 
 	split = line.split()
 	cmd, args = split[0], split[1:]
