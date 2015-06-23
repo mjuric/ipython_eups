@@ -2,7 +2,8 @@ from IPython.core.magic import (register_line_magic, register_cell_magic, regist
 import marshal, os, subprocess, sys, errno, tempfile, IPython, thread
 from IPython.utils.warn import (warn, error)
 import textwrap
-from IPython.display import (publish_display_data, clear_output)
+from IPython.display import (clear_output)
+import IPython.display
 
 # This will be populated by distrib/make_distrib.sh. Don't change
 # the magic value, unless you change it in make_distrib.sh as well.
@@ -25,7 +26,7 @@ def display(text=None, markdown=None):
 	if text: 	data['text/plain']    = text
 	if markdown:	data['text/markdown'] = markdown
 
-	publish_display_data(data)
+	IPython.display.display(data, raw=True)
 
 def update_sys_path(new, old):
 	# update sys.path to reflect the new state of the PYTHONPATH
