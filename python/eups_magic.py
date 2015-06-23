@@ -21,7 +21,7 @@ def display(text=None, markdown=None):
 
 	# default text to markdown
 	if not text and markdown:
-		text = markdown
+		text = render_to_plain(markdown)
 
 	if text: 	data['text/plain']    = text
 	if markdown:	data['text/markdown'] = markdown
@@ -379,9 +379,7 @@ def load_ipython_extension(ipython):
 	# Register %eups magic
 	ipython.register_magic_function(eups)
 
-	display(  text="[load_ext]: %eups magics loaded. Docs+source at http://github.com/mjuric/ipython_eups.",
-		  markdown="``%eups`` magics loaded. Documentation and source at http://github.com/mjuric/ipython_eups."
-	)
+	display(markdown="``%eups`` magics loaded. Documentation and source at http://github.com/mjuric/ipython_eups.")
 
 	# Check if EUPS has been setup, if not, try to set it up
 	# from the default environment.
@@ -394,3 +392,87 @@ def load_ipython_extension(ipython):
 
 #def unload_ipython_extension(ipython):
 #	# If you want your extension to be unloadable, put that logic here.
+
+
+#################################################################################
+# Simple Markdown -> text/html and text/plain parser, based on
+# https://gist.github.com/possatti/8918a324fa83acbd191b
+# by Lucas Possatti
+#
+
+import re
+import sys
+import collections
+
+##############################
+### Helper Functions, HTML ###
+##############################
+
+def html_paragraph(match_obj):
+	line = match_obj.group(1)
+	trimmed = line.strip()
+	if re.search(r'^<\/?(ul|ol|li|h|p|bl)', trimmed):
+		return "\n" + line + "\n"
+	return "\n<p>{}</p>\n".format(trimmed);
+
+def html_ul_list(match_obj):
+	item = match_obj.group(1);
+	return "\n<ul>\n\t<li>{}</li>\n</ul>".format(item.strip());
+
+def html_ol_list(match_obj):
+	item = match_obj.group(1);
+	return "\n<ol>\n\t<li>{}</li>\n</ol>".format(item.strip());
+
+def html_blockquote(match_obj):
+	item = match_obj.group(2);
+	return "\n<blockquote>{}</blockquote>".format(item.strip());
+
+def html_header(match_obj):
+	level = len(match_obj.group(1))
+	title = match_obj.group(2).strip()
+	return '<h{0}>{1}</h{0}>'.format(level, title)
+
+html_rules = collections.OrderedDict()
+html_rules[r'(#+)(.*)'] = html_header # headers
+html_rules[r'\[([^\[]+)\]\(([^\)]+)\)'] = r'<a href="\2">\1</a>' # links
+html_rules[r'(\*\*|__)(.*?)\1'] = r'<strong>\2</strong>' # bold
+html_rules[r'(\*|_)(.*?)\1'] = r'<em>\2</em>' # emphasis
+html_rules[r'\~\~(.*?)\~\~'] = r'<del>\1</del>' # del
+html_rules[r'\:\"(.*?)\"\:'] = r'<q>\1</q>' # quote
+html_rules[r'`(.*?)`'] = r'<code>\1</code>' # inline code
+html_rules[r'\n\*(.*)'] = html_ul_list # ul lists
+html_rules[r'\n[0-9]+\.(.*)'] = html_ol_list # ol lists
+html_rules[r'\n(&gt;|\>)(.*)'] = html_blockquote # blockquotes
+html_rules[r'\n-{5,}'] = r"\n<hr />" # horizontal rule
+html_rules[r'\n([^\n]+)\n'] = html_paragraph # add paragraphs
+html_rules[r'<\/ul>\s?<ul>'] = r'' # fix extra ul
+html_rules[r'<\/ol>\s?<ol>'] = r'' # fix extra ol
+html_rules[r'<\/blockquote><blockquote>'] = r"\n" # fix extra blockquote
+
+####################################
+### Helper Functions, text/plain ###
+####################################
+
+plain_rules = collections.OrderedDict()
+plain_rules[r'\[([^\[]+)\]\(([^\)]+)\)'] = r'\1 (at \2)' # links
+plain_rules[r'(\*\*|__)(.*?)\1'] = r'\2' # bold
+plain_rules[r'(\*|_)(.*?)\1'] = r'\2' # emphasis
+plain_rules[r'\~\~(.*?)\~\~'] = r'\1' # del
+plain_rules[r'\:\"(.*?)\"\:'] = r'\1' # quote
+plain_rules[r'`(.*?)`'] = r'\1' # inline code
+plain_rules[r'\n-{5,}'] = r"\n" + 40*"-" + "\n" # horizontal rule
+
+def render_to_plain(text):
+	text = '\n' + text + '\n'
+	for regex, replacement in plain_rules.items():
+		text = re.sub(regex, replacement, text)
+	return text.strip()
+
+#################
+### Debugging ###
+#################
+
+if False and __name__ == '__main__':
+	input_text = sys.stdin.read()
+	rendered_text = render_to_plain(input_text)
+	print rendered_text
