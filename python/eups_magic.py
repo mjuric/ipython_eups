@@ -16,15 +16,17 @@ else:
 
 EUPS_DIR_DEFAULT = os.path.join(os.path.expanduser("~"), '.eups', 'default')
 
-def display(text=None, markdown=None):
+def display(markdown, text=None):
 	data = {}
 
 	# default text to markdown
-	if not text and markdown:
+	if not text:
 		text = render_to_plain(markdown)
 
 	if text: 	data['text/plain']    = text
 	if markdown:	data['text/markdown'] = markdown
+
+	assert data
 
 	IPython.display.display(data, raw=True)
 
@@ -185,10 +187,10 @@ for k, v in os.environ.iteritems():
 		# b) but we also want the message about eups_loc to be printed
 		#    no matter what, so the user is given information about where
 		#    eups is being loaded from in case anything went wrong.
-		markdown = "**``%%eups init:``** loading EUPS from `%s`." % eups_loc
+		msg = "**``%%eups init:``** loading EUPS from `%s`." % eups_loc
 		if 'EUPS_PATH' in os.environ:
-			markdown += "  \n**``%%eups init:``** using `EUPS_PATH=%s`." % os.environ['EUPS_PATH']
-		display(markdown=markdown)
+			msg += "  \n**``%%eups init:``** using `EUPS_PATH=%s`." % os.environ['EUPS_PATH']
+		display(msg)
 
 	if eups_loc != EUPS_DIR_DEFAULT:
 		if set_default:
@@ -196,7 +198,7 @@ for k, v in os.environ.iteritems():
 				os.unlink(EUPS_DIR_DEFAULT)
 
 			msg="**``%%eups init:``** symlinking `%s` -> `%s`" % (EUPS_DIR_DEFAULT, eups_loc)
-			display(markdown=msg)
+			display(msg)
 
 			os.symlink(eups_loc, EUPS_DIR_DEFAULT)
 		elif not os.path.islink(EUPS_DIR_DEFAULT):
@@ -298,10 +300,10 @@ def eups(line):
 
 				# print out some useful info about what we've just setup-ed
 				msg = "**``%%eups %s:``** `%s`, version `%s`" % ('setup' if not unsetup else 'unsetup', product, version)
-				display(markdown=msg)
+				display(msg)
 	elif cmd == "version":
 		msg = "**``%%eups version:``** `%s`" % (__version__)
-		display(markdown=msg)
+		display(msg)
 	else:
 		setupcmd = "eups %s %s" % (cmd, ' '.join(args))
 		from IPython.utils.process import system
@@ -379,7 +381,7 @@ def load_ipython_extension(ipython):
 	# Register %eups magic
 	ipython.register_magic_function(eups)
 
-	display(markdown="``%eups`` magics loaded. Documentation and source at http://github.com/mjuric/ipython_eups.")
+	display("``%eups`` magics loaded. Documentation and source at http://github.com/mjuric/ipython_eups.")
 
 	# Check if EUPS has been setup, if not, try to set it up
 	# from the default environment.
