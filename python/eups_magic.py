@@ -227,7 +227,7 @@ for k, v in os.environ.iteritems():
 
 			os.symlink(eups_loc, EUPS_DIR_DEFAULT)
 		elif not os.path.islink(EUPS_DIR_DEFAULT):
-			print "To set this EUPS as default, rerun with `%%eups init --set-default %s'" % eups_loc
+			display("**``%%eups init:``** To make this default, rerun with ``%%eups init --set-default %s``" % eups_loc)
 
 def _get_setuped_product_version(product):
 	"""
