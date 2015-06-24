@@ -49,3 +49,9 @@ work, before transparently handing of control to your IPython interpreter.
 
 More installation options are described in [the overview
 notebook](doc/eups-magics-overview.ipynb) in the doc directory.
+
+## Compatibility
+
+While the code is actively developed and regularly tested with IPython 3.0
+only, any IPython version >= 1.1 should work (and problems will be
+considered bugs).
