@@ -5,8 +5,8 @@
 This is an IPython extension and a wrapper script that add a new magic
 named `%eups` to IPython, which allows one to:
 
-* initialize EUPS without restarting the notebook (i.e., the equivalent of
-  sourcing setups.sh)
+* initialize [EUPS](https://github.com/RobertLuptonTheGood/eups) without
+  restarting the notebook (i.e., the equivalent of sourcing setups.sh)
 
 * setup EUPS products from within the notebook (i.e., the equivalent of
   running `setup foo` on the command line)
@@ -23,35 +23,74 @@ they've forgotten to setup a product that's needed at that point.
 
 ## Example
 
-Setting up a specific version of the OpenOrb package:
+After starting `ipython` with `ipython-eups` support (see the next section),
+to set up a specific version of the [OpenOrb](https://github.com/oorb/oorb)
+product, run:
 
-    # Load the eups_magic extension (do this once per notebook)
-    %load_ext eups_magic
+```python
+# Load the eups_magic extension (do this once per notebook)
+%load_ext eups_magic
 
-    %eups setup oorb lsst-g650e0a6f6c
+%eups setup oorb lsst-g650e0a6f6c
 
-    import pyoorb
+import pyoorb
+```
 
 More examples and documentation are available in [the overview
 notebook](doc/eups-magics-overview.ipynb) in the doc directory.
 
-## Installing
+## Installing and Running
 
-Download the `ipython` pass-through script and place it somewhere on your
-path (before the real ipython !). For example:
+Download the `ipython-eups` script and run it any time you'd ordinarily run
+IPython:
 
-    wget http://eupsforge.net/ipython
-    chmod +x ipython
-    cp ipython ...somewhere/on/your/path...
+```bash
+wget http://eupsforge.net/ipython-eups
+chmod +x ipython-eups
+```
 
-This script will set up the environment required for `%eups` extension to
-work, before transparently handing of control to your IPython interpreter.
+This script sets up the environment required for `%eups` magic to work,
+before transparently handing of control to your IPython interpreter.
 
-More installation options are described in [the overview
-notebook](doc/eups-magics-overview.ipynb) in the doc directory.
+You can also alias your `ipython` to `ipython-eups`:
+
+```bash
+alias ipython="...path/to/ipython-eups"	# bash, ksh, zsh
+```
+
+or
+
+```csh
+alias ipython "...path/to/ipython-eups"	# csh, tcsh
+```
+
+Appending these to your `.bashrc` (for `bash`) or `.cshrc` (for
+`csh` and `tcsh`) will make this automatic.
 
 ## Compatibility
 
 While the code is actively developed and regularly tested with IPython 3.0
 only, any IPython version >= 1.1 should work (and problems will be
 considered bugs).
+
+## Developing
+
+The sources are at http://github.com/mjuric/ipython_eups, and ipython-eups
+is an EUPS product itself:
+
+    git clone http://github.com/mjuric/ipython_eups
+    setup -r ipython_eups
+
+This is a pure python extenson, so no compilation is necessary. The `setup`
+will add `./bin` (where the `ipython-eups` script) to `$PATH`, and
+`./python` (where the IPython extension code is) to `$PYTHONPATH`.
+
+To create a redistributable "packed" wrapper script that includes everything
+needed to run ipython-eups (like the one distributed via
+http://eupsforge.net), run:
+
+    ./distrib/make_distrib.sh
+
+The packed script will be created in `./distrib`. Running with `--publish`
+will also publish it to eupsforge.net (assuming you have the permissions to
+do so).

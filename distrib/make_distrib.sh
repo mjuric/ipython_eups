@@ -3,19 +3,20 @@
 # Usage: make_distrib.sh [--publish]
 #
 # If --publish is specify, scp the result so it's visible as
-# http://eupsforge.net/ipython
+# http://eupsforge.net/ipython-eups
 #
 
 set -e
 
 DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 
-BIN_IPYTHON="$DIR/../bin/ipython"
+WRAPPER_NAME=ipython-eups
+BIN_IPYTHON="$DIR/../bin/$WRAPPER_NAME"
 EUPS_MAGIC="$DIR/../python/eups_magic.py"
 
-DISTRIB_IPYTHON="$DIR/ipython"
+DISTRIB_IPYTHON="$DIR/ipython-eups"
 
-EUPSFORGE_PATH="mjuric@lsst-dev.ncsa.illinois.edu:public_html/eupsforge/ipython"
+EUPSFORGE_PATH="mjuric@lsst-dev.ncsa.illinois.edu:public_html/eupsforge/ipython-eups"
 
 VERSION=$(git describe --always --dirty)
 
@@ -31,7 +32,7 @@ fi
 # Copy ipython, inserting version
 head -n 1 "$BIN_IPYTHON" > "$DISTRIB_IPYTHON"
 echo "#" >> "$DISTRIB_IPYTHON"
-echo "# GENERATED FILE. DO NOT EDIT. THE SOURCE IS IN bin/ipython" >> "$DISTRIB_IPYTHON"
+echo "# GENERATED FILE. DO NOT EDIT. THE SOURCE IS IN bin/$WRAPPER_NAME" >> "$DISTRIB_IPYTHON"
 echo "# THIS FILE WAS GENERATED WITH $(basename $0)." >> "$DISTRIB_IPYTHON"
 echo "#" >> "$DISTRIB_IPYTHON"
 echo "# git describe version: $VERSION" >> "$DISTRIB_IPYTHON"
@@ -50,6 +51,6 @@ sed -i.bak "s|%%VERSION-NOT-SET-RUNNING-FROM-SOURCE%%|$VERSION|" "$DISTRIB_IPYTH
 echo "The packed script has been created in $DISTRIB_IPYTHON"
 
 if [[ "$1" == "--publish" ]]; then
-	echo "Publishing to EUPSForge (http://eupsforge.net/ipython):"
+	echo "Publishing to EUPSForge (http://eupsforge.net/$WRAPPER_NAME):"
 	scp "$DISTRIB_IPYTHON" "$EUPSFORGE_PATH"
 fi

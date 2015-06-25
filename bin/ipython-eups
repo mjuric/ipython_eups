@@ -13,8 +13,9 @@
 # distributed except according to the terms contained in the LICENSE file.
 #
 
-# IPython executable name (because it could be ipython-2.7, for example...)
-IPY_NAME=$(basename "$0")
+# IPython executable name (because it could be ipython-2.7, for example...),
+# but ignoring any -eups suffix (i.e. ipython-eups -> ipython).
+IPY_NAME=$(basename "${0%-eups}")
 
 SELFMAGIC="__ipython_eups_trampoline_script_file__"
 
